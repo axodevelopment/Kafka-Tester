@@ -87,33 +87,43 @@ func main() {
 
 	defer producer.Close()
 
-	t := time.Now()
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
 
-	msg := Message{
-		Timestamp: t,
-		Message:   fmt.Sprintf("Hello Kafka at %s", t.Format(time.RFC3339)),
+	for {
+		select {
+		case <-osSig:
+			logd("Closing Application...")
+			return
+		case t := <-ticker.C:
+
+			msg := Message{
+				Timestamp: t,
+				Message:   fmt.Sprintf("Hello Kafka at %s", t.Format(time.RFC3339)),
+			}
+
+			jmsg, err := json.Marshal(msg)
+
+			if err != nil {
+				log.Fatal("Failed to marshal json: %v", err)
+			}
+
+			partition, offset, err := producer.SendMessage(&sarama.ProducerMessage{
+				Topic: topic,
+				Value: sarama.StringEncoder(jmsg),
+			})
+
+			if err != nil {
+				log.Printf("Failed to send message: %v", err)
+
+				//TODO: Check [Failed to send message: kafka server: The request attempted to perform an operation on an invalid topic]
+			} else {
+				log.Printf("Message sent to partition %d at offset %d: %s", partition, offset, string(jmsg))
+			}
+
+		}
+
 	}
-
-	jmsg, err := json.Marshal(msg)
-
-	if err != nil {
-		log.Fatal("Failed to marshal json: %v", err)
-	}
-
-	partition, offset, err := producer.SendMessage(&sarama.ProducerMessage{
-		Topic: topic,
-		Value: sarama.StringEncoder(jmsg),
-	})
-
-	if err != nil {
-		log.Printf("Failed to send message: %v", err)
-
-		//TODO: Check [Failed to send message: kafka server: The request attempted to perform an operation on an invalid topic]
-	} else {
-		log.Printf("Message sent to partition %d at offset %d: %s", partition, offset, string(jmsg))
-	}
-
-	<-osSig
 }
 
 func createTLSConfiguration() (t *tls.Config) {
