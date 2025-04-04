@@ -63,6 +63,8 @@ func main() {
 	tlsSkipVerify = false
 	useTLS = true
 
+	doConsumer := false
+
 	osSig := make(chan os.Signal, 2)
 
 	signal.Notify(osSig, os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
@@ -73,9 +75,11 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	go func(ctx context.Context) {
-		startConsumer(ctx)
-	}(ctx)
+	if doConsumer {
+		go func(ctx context.Context) {
+			startConsumer(ctx)
+		}(ctx)
+	}
 
 	<-osSig
 	cancel()
