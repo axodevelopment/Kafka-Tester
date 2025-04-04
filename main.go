@@ -63,7 +63,7 @@ func main() {
 	tlsSkipVerify = false
 	useTLS = true
 
-	doConsumer := false
+	doConsumer := true
 
 	osSig := make(chan os.Signal, 2)
 
