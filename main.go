@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -66,6 +67,100 @@ func main() {
 
 	signal.Notify(osSig, os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
 
+	go func(sig chan os.Signal) {
+		startProducer(sig)
+	}(osSig)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func(ctx context.Context) {
+		startConsumer(ctx)
+	}(ctx)
+
+	<-osSig
+	cancel()
+}
+
+func startConsumer(ctx context.Context) {
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_9_0_0
+
+	if useTLS {
+		config.Net.TLS.Enable = true
+		config.Net.TLS.Config = createTLSConfiguration()
+	}
+
+	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
+
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	group := "my-group"
+
+	consumer, err := sarama.NewConsumerGroup([]string{bootstrapServer}, group, config)
+
+	if err != nil {
+		log.Fatal("Failed to create consumer: %v", err)
+
+	}
+
+	defer consumer.Close()
+
+	handler := consumerGroupHandler{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			logd("Closing Application...")
+			return
+		default:
+			err := consumer.Consume(ctx, []string{topic}, handler)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				log.Printf("Error from consumer: %v", err)
+				time.Sleep(time.Second)
+
+			}
+		}
+	}
+}
+
+type consumerGroupHandler struct{}
+
+func (consumerGroupHandler) Setup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (consumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (h consumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for {
+		select {
+		case message, ok := <-claim.Messages():
+			if !ok {
+				return nil
+			}
+			log.Printf("Message received: topic=%s, partition=%d, offset=%d, key=%s, value=%s",
+				message.Topic, message.Partition, message.Offset, string(message.Key), string(message.Value))
+
+			var msg Message
+			if err := json.Unmarshal(message.Value, &msg); err != nil {
+				log.Printf("Error unmarshaling message: %v", err)
+			} else {
+				log.Printf("Processed message: %+v", msg)
+			}
+
+			session.MarkMessage(message, "")
+		case <-session.Context().Done():
+			return nil
+		}
+	}
+}
+
+func startProducer(osSig chan os.Signal) {
 	config := sarama.NewConfig()
 	config.Version = sarama.V3_9_0_0
 
@@ -122,7 +217,6 @@ func main() {
 			}
 
 		}
-
 	}
 }
 
