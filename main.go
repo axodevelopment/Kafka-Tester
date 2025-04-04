@@ -31,7 +31,7 @@ var (
 	keyFile         = ""
 	caFile          = ""
 	tlsSkipVerify   = false
-	useTLS          = true
+	useTLS          = false
 )
 
 func logd(args ...string) {
@@ -59,7 +59,7 @@ func main() {
 	certFile = "user.crt"
 	keyFile = "user.key"
 	caFile = "ca.crt"
-	tlsSkipVerify = true
+	tlsSkipVerify = false
 	useTLS = true
 
 	osSig := make(chan os.Signal, 2)
