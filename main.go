@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -14,17 +15,22 @@ import (
 	"github.com/IBM/sarama"
 )
 
+type Message struct {
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
+}
+
 const (
 	SERVICE_NAME = "KAFKA-TESTER"
 )
 
 var (
 	bootstrapServer = ""
-	topic           = ""
+	topic           = "mytopic"
 	certFile        = ""
 	keyFile         = ""
 	caFile          = ""
-	tlsSkipVerify   = true
+	tlsSkipVerify   = false
 	useTLS          = true
 )
 
@@ -49,6 +55,7 @@ func main() {
 	logd("Application String ...")
 
 	bootstrapServer = "my-cluster-kraft-kafka-bootstrap-kafka-tutorial-kraft-east.apps.axolab.axodevelopment.dev:443"
+	topic = "mytopic"
 	certFile = "user.crt"
 	keyFile = "user.key"
 	caFile = "ca.crt"
@@ -80,6 +87,32 @@ func main() {
 
 	defer producer.Close()
 
+	t := time.Now()
+
+	msg := Message{
+		Timestamp: t,
+		Message:   fmt.Sprintf("Hello Kafka at %s", t.Format(time.RFC3339)),
+	}
+
+	jmsg, err := json.Marshal(msg)
+
+	if err != nil {
+		log.Fatal("Failed to marshal json: %v", err)
+	}
+
+	partition, offset, err := producer.SendMessage(&sarama.ProducerMessage{
+		Topic: topic,
+		Value: sarama.StringEncoder(jmsg),
+	})
+
+	if err != nil {
+		log.Printf("Failed to send message: %v", err)
+
+		//TODO: Check [Failed to send message: kafka server: The request attempted to perform an operation on an invalid topic]
+	} else {
+		log.Printf("Message sent to partition %d at offset %d: %s", partition, offset, string(jmsg))
+	}
+
 	<-osSig
 }
 
@@ -105,7 +138,7 @@ func createTLSConfiguration() (t *tls.Config) {
 		t = &tls.Config{
 			Certificates:       []tls.Certificate{cert},
 			RootCAs:            caCertPool,
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: tlsSkipVerify,
 		}
 	}
 

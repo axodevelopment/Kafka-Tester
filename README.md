@@ -4,6 +4,9 @@ Kafka Tester
 ## Getting kafkauser info ready for go app
 *NOTE if you are in java you need to build a trust store instead, the secret will default to a .p12 format
 
+Code reference from Sarama
+https://github.com/IBM/sarama/blob/main/examples/sasl_scram_client/main.go
+
 
 For a Go app we will just need the following:
 
